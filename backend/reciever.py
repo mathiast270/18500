@@ -1,12 +1,13 @@
+import multiprocessing
 from flask import Flask, request, redirect, url_for
 from werkzeug.utils import secure_filename
 import subprocess
 import os
 import xml.etree.ElementTree as ET
 import cv2
-
+import session
 app = Flask(__name__)
-UPLOAD_FOLDER = './upload_folder'
+UPLOAD_FOLDER = '../../upload_folder'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg','pdf'}
 AUDIVERIES_COMMAND = './audiveris/build/distributions/Audiveris-5.3.1/bin/Audiveris -export -batch'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -32,17 +33,35 @@ def upload():
 
 @app.route('/startsong', methods=['POST'])
 def start_song():
-
-    if 'file' not in request.files:
-        return redirect(request.url)
-    file = request.files('file')
-    if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            
-
-            return redirect(url_for('download_file', name=filename))
+    print("Recieved Start Song")
+    song_name = str(request.get_data())
+    song_name = song_name[2:len(song_name) - 1]
+    print(song_name)
+    data_path = os.path.join(app.config['UPLOAD_FOLDER'], song_name)
+    music_path = ""
+    sheets = []
+    images = []
+    for dir_path in os.listdir(data_path):
+         for dir_path2 in os.listdir(os.path.join(data_path,dir_path)):
+              
+              if(dir_path.endswith("sheet")):
+                   if(os.path.isdir(os.path.join(data_path, dir_path,dir_path2))):
+                        for dir_path3 in os.listdir(os.path.join(data_path,dir_path,dir_path2)):
+                             print(dir_path3)
+                             if(dir_path3.endswith(".png")):
+                                  images.append(os.path.join(data_path, dir_path, dir_path2, dir_path3))
+                             else:
+                                  sheets.append(os.path.join(data_path, dir_path, dir_path2, dir_path3))
+              else:
+                   if(os.path.isfile(os.path.join(data_path, dir_path,dir_path2))):
+                        music_path = os.path.join(data_path, dir_path,dir_path2)
     
+    print(sheets)
+    print( "path:" +music_path)          
+    p = multiprocessing.Process(target=session.create_and_handle_session, args=(sheets,music_path,images))
+    p.start()
+    p.join()
+    print("Done")
     return '''
     <!doctype html>
     <title>Upload new File</title>

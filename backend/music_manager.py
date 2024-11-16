@@ -2,17 +2,13 @@ import subprocess
 import xml.etree.ElementTree as ET
 import cv2
 
-
-AUDIVERIES_COMMAND = '../../audiveris/build/distributions/Audiveris-5.3.1/bin/Audiveris -export -batch'
-
 def sort_list(ele):
     return ele[0]
 
 def find_beat_pos(in_list, beat_start, beat_end):
     found_start = False
     found_start_idx = 0
-    found_end_idx = 0
-    print(in_list)
+    
     for idx, ele in enumerate(in_list):
         print(ele[2])
         if(ele[2] >= beat_start and not found_start):
@@ -21,9 +17,9 @@ def find_beat_pos(in_list, beat_start, beat_end):
         if(ele[2] >= beat_end):
             return (found_start_idx,idx)
         
-def parse_xml(path,path2):
-     #parse beats/durations of notes
-     file = ET.parse(path2)
+    return (found_start_idx, len(in_list) - 1)
+def make_lists_count(sheet_path, music_xml_path, image_path,count):
+     file = ET.parse(music_xml_path)
      root = file.getroot()
      parts = root.findall('part')
      beat_list_singer = list()
@@ -66,7 +62,7 @@ def parse_xml(path,path2):
 
                 
      #Parse positions of notes,
-     file = ET.parse(path)
+     file = ET.parse(sheet_path)
      root = file.getroot()
      page = root.find('page')
      systems = page.findall('system')
@@ -87,7 +83,7 @@ def parse_xml(path,path2):
         #print(tupl)
         
         heads = inters.findall('head')
-        template = cv2.imread('../../BINARY.png')
+        template = cv2.imread(image_path)
         cv2.rectangle(template,(int((brace['x'])),int(brace['y'])),tupl
                     ,(0, 0, 255), 2)
         listsing_ = list()
@@ -115,9 +111,9 @@ def parse_xml(path,path2):
             x_post = ele[0]
             if(x_post  <= prev_x +5 and x_post >= prev_x - 5 ):
                 continue
-            singer_list.append((ele[0], ele[1],prev_beat + beat_list_singer[count_s] ))
+            singer_list.append((ele[0], ele[1],prev_beat +beat_list_singer[count_s + count] ))
             prev_x = x_post
-            prev_beat += beat_list_singer[count_s]
+            prev_beat += beat_list_singer[count + count_s]
             count_s += 1
         
         '''
@@ -135,31 +131,85 @@ def parse_xml(path,path2):
                 continue
             piano_list_r.append((ele[0], ele[1],beat_list_singer[count_piano_r] ))
             prev_x = x_post
-            count_piano_r += 1
+            count_
         '''
-     (idx1, idx2) = find_beat_pos(singer_list, 8, 150)
-     print((idx1,idx2))
-     prev_x = 0
-     start = idx1
-     #do this to check for new line
-     for i in range(idx1,idx2 + 1):
-        if(singer_list[i][0] < prev_x):
-            cv2.rectangle(template, (singer_list[start][0], singer_list[start][1]), 
-                (singer_list[i - 1][0] + 5, singer_list[i - 1][1] + 5),(0, 0, 255), 2)
-            start = i
-            prev_x = 0
-        prev_x =  singer_list[i][0]
-    
+        return (singer_list, count_s,template)
+class MusicManager():
+    def __init__(self, sheet_path, music_xml_path,image_path):
+        self.singer_lists = []
+        self.image_lists = []
+        total_count = 0
+        for idx, sheet in enumerate(sheet_path):
+            (singers, count_s, templates) = make_lists_count(sheet,music_xml_path,image_path[idx],total_count)
+            total_count += count_s
+            self.singer_lists.append(singers)
+            self.image_lists.append(templates)
+
+        self.in_sync = True
+        self.start = -1
+        self.last_recieved_beat = -1
+        #parse beats/durations of notes
+    def set_sync_status(self,beat, sync_status):
+        #In this case we should start measuring 
+        if(self.in_sync and not sync_status):
+            self.in_sync = False
+            self.start = beat
+        #Are in sync again dont write to file
+        elif(not self.in_sync and sync_status):
+            print("Nooooooo plsss")
+            for idx, singer in enumerate(self.singer_lists):
+                print()
+                if(singer[0][2] > self.start or singer[len(singer) - 1][2] < self.start):
+                    print(singer)
+                    print(self.start)
+                    continue
+                (start, end) = find_beat_pos(singer, self.start,beat)
+                image = self.image_lists[idx]
+                start_t = start
+                prev_x = 0
+                for i in range(start,end + 1):
+                    print("Nooooooo")
+                    if(singer[i][0] < prev_x):
+                        cv2.rectangle(image, (singer[start_t][0], singer[start_t][1]), 
+                            (singer[i - 1][0] + 5, singer[i - 1][1] + 5),(0, 0, 255), 2)
+                        start_t = i
+                        prev_x = 0
+                    prev_x =  singer[i][0]
+                cv2.imwrite(f"results{idx}.png", image)
+                #Continue parsing to next sheet 
+                if(singer[end][2] < beat):
+                    if(idx < len(self.singer_lists) - 1):
+                        self.start = self.singer_lists[idx + 1][2]
             
+            self.in_sync = True
+            self.start = False
+        else:
+            self.last_recieved_beat = beat
+            
+    def done(self):
+        print(f"len singer list: {self.singer_lists}")
+        print(f"start list: {self.start}")
+        for idx, singer in enumerate(self.singer_lists):
+                if(singer[0][2] > self.start or singer[len(singer) - 1][2] < self.start):
+                    continue
+                (start, end) = find_beat_pos(singer, self.start,self.last_recieved_beat)
+                image = self.image_lists[idx]
+                start_t = start
+                prev_x = 0
+                for i in range(start,end + 1):
+                    if(singer[i][0] < prev_x):
+                        cv2.rectangle(image, (singer[start_t][0], singer[start_t][1]), 
+                            (singer[i - 1][0] + 5, singer[i - 1][1] + 5),(0, 0, 255), 2)
+                        start_t = i
+                        prev_x = 0
+                    prev_x =  singer[i][0]
+                print("Made it")
+                cv2.imwrite(f"results{idx}.png", image)
+                #Continue parsing to next sheet 
+                if(singer[end][2] < self.last_recieved_beat):
+                    if(idx < len(self.singer_lists)):
+                        self.start = self.singer_lists[idx + 1][2]
+            
+        self.in_sync = True
+        self.start = False
         
-     cv2.rectangle(template, (singer_list[start][0], singer_list[start][1]), 
-     (singer_list[idx2][0] + 5, singer_list[idx2][1] + 5),(0, 0, 255), 2)
-     cv2.imwrite("results.png", template)
-    
-def upload(file_path):
-    result = subprocess.run([AUDIVERIES_COMMAND, "-export", "-batch", file_path])
-    return_code = result.returncode
-    return f"Yes {return_code}"
-    
-#upload("../../Ach, ich fühl's (Pamina) La flauta mágica (Mozart).pdf")     
-parse_xml('../../sheet#1.xml', '../../music1.xml')
