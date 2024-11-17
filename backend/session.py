@@ -22,11 +22,10 @@ def create_and_handle_session(sheet_path, music_xml_path,image_path):
         #s.sendall
         while True:
             data = conn.recv(1024)
-            print(len(data))
+            
             if not data:
                 break
             restored_obj = pickle.loads(data)
-            print(f"beat: {restored_obj.beat} is_sync {restored_obj.is_sync}")
             manager.set_sync_status(restored_obj.beat,restored_obj.is_sync)
             conn.sendall(data)
         manager.done()

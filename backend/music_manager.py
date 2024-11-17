@@ -1,7 +1,7 @@
 import subprocess
 import xml.etree.ElementTree as ET
 import cv2
-
+import numpy as np
 def sort_list(ele):
     return ele[0]
 
@@ -18,7 +18,7 @@ def find_beat_pos(in_list, beat_start, beat_end):
             return (found_start_idx,idx)
         
     return (found_start_idx, len(in_list) - 1)
-def make_lists_count(sheet_path, music_xml_path, image_path,count):
+def make_lists_count(sheet_path, music_xml_path, image_path,prev_beats,count):
      file = ET.parse(music_xml_path)
      root = file.getroot()
      parts = root.findall('part')
@@ -73,10 +73,24 @@ def make_lists_count(sheet_path, music_xml_path, image_path,count):
      count_s = 0
      count_piano_l = 0
      count_piano_r = 0
-     prev_beat = 0
+     prev_beat = prev_beats
      for system in systems:
         sig = system.find('sig')
         inters = sig.find('inters')
+        parts = system.findall('part')
+        poistions = list()
+        is_part1 = True
+        for part in parts:
+            staffs = part.findall('staff')
+            print("yee")
+            for staff in staffs:
+                lines = staff.find('lines')
+                line_array = lines.findall('line')
+                first_line = line_array[0]
+                last_line = line_array[len(line_array) - 1]
+                first_point = float(first_line.find('point').attrib['y'])
+                last_point = float(last_line.findall('point')[len(last_line.findall('point')) - 1].attrib['y'])
+                poistions.append((first_point, last_point))
         #print(inters.tag)
         brace = inters.find('brace').find('bounds').attrib
         tupl =  ((int(brace['x']) + 5),(int(brace['y']) + int(brace['h'])))
@@ -84,8 +98,7 @@ def make_lists_count(sheet_path, music_xml_path, image_path,count):
         
         heads = inters.findall('head')
         template = cv2.imread(image_path)
-        cv2.rectangle(template,(int((brace['x'])),int(brace['y'])),tupl
-                    ,(0, 0, 255), 2)
+        
         listsing_ = list()
         list_piano_1 = list()
         list_piano_2 = list()
@@ -94,11 +107,11 @@ def make_lists_count(sheet_path, music_xml_path, image_path,count):
         for head in heads:
             bounds = head.find('bounds').attrib
             if(int(bounds['y']) < brace_y - brace_height/3):
-                listsing_.append((int(bounds['x']),int(bounds['y'])))
+                listsing_.append((int(bounds['x']),poistions[0][0],poistions[0][1] ))
             elif(int(bounds['y']) < brace_y + brace_height/2):
-                list_piano_1.append((int(bounds['x']),int(bounds['y'])))
+                list_piano_1.append((int(bounds['x']),poistions[1][0], poistions[1][1]))
             else:
-                list_piano_2.append((int(bounds['x']),int(bounds['y'])))
+                list_piano_2.append((int(bounds['x']),poistions[2][0], poistions[2][1]))
             #print(int(bounds['x']))
             #cv2.rectangle(template, (int(bounds['x']), int(bounds['y'])), 
                         #(int(bounds['x']) + 5, int(bounds['y']) + 5),(0, 0, 255), 2)
@@ -111,7 +124,7 @@ def make_lists_count(sheet_path, music_xml_path, image_path,count):
             x_post = ele[0]
             if(x_post  <= prev_x +5 and x_post >= prev_x - 5 ):
                 continue
-            singer_list.append((ele[0], ele[1],prev_beat +beat_list_singer[count_s + count] ))
+            singer_list.append((ele[0], ele[1],prev_beat +beat_list_singer[count_s + count], ele[2] ))
             prev_x = x_post
             prev_beat += beat_list_singer[count + count_s]
             count_s += 1
@@ -133,15 +146,18 @@ def make_lists_count(sheet_path, music_xml_path, image_path,count):
             prev_x = x_post
             count_
         '''
-        return (singer_list, count_s,template)
+        return (singer_list, count_s,prev_beat, template)
 class MusicManager():
     def __init__(self, sheet_path, music_xml_path,image_path):
         self.singer_lists = []
         self.image_lists = []
         total_count = 0
+        beat = 0
         for idx, sheet in enumerate(sheet_path):
-            (singers, count_s, templates) = make_lists_count(sheet,music_xml_path,image_path[idx],total_count)
+            print(total_count)
+            (singers, count_s, prev_beat, templates) = make_lists_count(sheet,music_xml_path,image_path[idx],beat,total_count)
             total_count += count_s
+            beat += prev_beat
             self.singer_lists.append(singers)
             self.image_lists.append(templates)
 
@@ -156,33 +172,46 @@ class MusicManager():
             self.start = beat
         #Are in sync again dont write to file
         elif(not self.in_sync and sync_status):
-            print("Nooooooo plsss")
+            print(f"beat {beat}" )
             for idx, singer in enumerate(self.singer_lists):
                 print()
                 if(singer[0][2] > self.start or singer[len(singer) - 1][2] < self.start):
-                    print(singer)
-                    print(self.start)
+                   
                     continue
                 (start, end) = find_beat_pos(singer, self.start,beat)
                 image = self.image_lists[idx]
                 start_t = start
                 prev_x = 0
                 for i in range(start,end + 1):
-                    print("Nooooooo")
                     if(singer[i][0] < prev_x):
-                        cv2.rectangle(image, (singer[start_t][0], singer[start_t][1]), 
-                            (singer[i - 1][0] + 5, singer[i - 1][1] + 5),(0, 0, 255), 2)
+                        x, y, x2, y2 = singer[start_t][0],  int(singer[start_t][1]), singer[i - 1][0] , int(singer[i - 1][3])
+                        sub_img = image[y:y2, x:x2]
+                        yellow_rect = np.zeros_like(sub_img, dtype=np.uint8)
+                        yellow_rect[:] = [0, 255, 255]  # Yellow color in BGR format (Blue, Green, Red)
+                      
+                        res = cv2.addWeighted(sub_img, 0.5, yellow_rect, 0.5, 1.0)
+                        image[y:y+y2, x:x+x2] = res
                         start_t = i
                         prev_x = 0
                     prev_x =  singer[i][0]
-                cv2.imwrite(f"results{idx}.png", image)
-                #Continue parsing to next sheet 
-                if(singer[end][2] < beat):
+                print(end ,len(self.singer_lists))
+                x, y, x2, y2 = singer[start_t][0],  int(singer[start_t][1]), singer[i - 1][0] , int(singer[i - 1][3])
+                sub_img = image[y:y2, x:x2]
+                yellow_rect = np.zeros_like(sub_img, dtype=np.uint8)
+                yellow_rect[:] = [0, 255, 255]  # Yellow color in BGR format (Blue, Green, Red)
+                res = cv2.addWeighted(sub_img, 0.5, yellow_rect, 0.5, 1.0)
+                image[y:y2, x: x2] = res
+                
+               
+                #Continue parsing to next sheet
+                print(f"singer: {singer[end][2]}, beat {beat}") 
+                if(singer[end][2] + 5 < beat):
                     if(idx < len(self.singer_lists) - 1):
-                        self.start = self.singer_lists[idx + 1][2]
+                        self.start = self.singer_lists[idx + 1][0][2]
+                        print(f"self.star {self.start}")
             
             self.in_sync = True
-            self.start = False
+            self.start = -1
         else:
             self.last_recieved_beat = beat
             
@@ -199,17 +228,20 @@ class MusicManager():
                 for i in range(start,end + 1):
                     if(singer[i][0] < prev_x):
                         cv2.rectangle(image, (singer[start_t][0], singer[start_t][1]), 
-                            (singer[i - 1][0] + 5, singer[i - 1][1] + 5),(0, 0, 255), 2)
+                            (singer[i - 1][0] + 5, singer[i - 1][3] ),(0, 0, 255), 2)
                         start_t = i
                         prev_x = 0
                     prev_x =  singer[i][0]
+                cv2.rectangle(image, (singer[start_t][0], singer[start_t][1]), 
+                    (singer[end][0] + 5, singer[end][3] ),(0, 0, 255), 2)
                 print("Made it")
-                cv2.imwrite(f"results{idx}.png", image)
                 #Continue parsing to next sheet 
                 if(singer[end][2] < self.last_recieved_beat):
-                    if(idx < len(self.singer_lists)):
-                        self.start = self.singer_lists[idx + 1][2]
+                    if(idx < len(self.singer_lists) -1 ):
+                        self.start = self.singer_lists[idx + 1][0][2]
+        for idx,image_ in enumerate(self.image_lists):
+            cv2.imwrite(f"results{idx}.png", image_)
             
         self.in_sync = True
-        self.start = False
+        self.start = -1
         
