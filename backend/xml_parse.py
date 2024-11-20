@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 import cv2
 
 
-AUDIVERIES_COMMAND = '../../audiveris/build/distributions/Audiveris-5.3.1/bin/Audiveris -export -batch'
+AUDIVERIES_COMMAND = '../audiveris/build/distributions/Audiveris-5.3.1/bin/Audiveris -export -batch'
 
 def sort_list(ele):
     return ele[0]

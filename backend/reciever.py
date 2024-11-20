@@ -34,8 +34,8 @@ def upload():
             os.mkdir(f"{UPLOAD_FOLDER}/{saved_name}")
             os.mkdir(f"{UPLOAD_FOLDER}/{saved_name}/{saved_name}sheet")
             os.mkdir(f"{UPLOAD_FOLDER}/{saved_name}/{saved_name}music")
-            extract_to_directory = f"{UPLOAD_FOLDER}/{saved_name}/{saved_name}sheet"
-            extract_to_directory2 = f"{UPLOAD_FOLDER}/{saved_name}/{saved_name}music"
+            extract_to_directory = f"{UPLOAD_FOLDER}/{saved_name}/{saved_name}music"
+            extract_to_directory2 = f"{UPLOAD_FOLDER}/{saved_name}/{saved_name}sheet"
             shutil.move(f"/Users/mathiasthomas/Library/AudiverisLtd/audiveris/data/{saved_name}/{saved_name}.mxl", f"{UPLOAD_FOLDER}/{saved_name}")
             shutil.move(f"/Users/mathiasthomas/Library/AudiverisLtd/audiveris/data/{saved_name}/{saved_name}.omr", f"{UPLOAD_FOLDER}/{saved_name}")
             with zipfile.ZipFile( f"{UPLOAD_FOLDER}/{saved_name}/{saved_name}.mxl", 'r') as zip_ref:
